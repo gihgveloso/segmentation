@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(./test.py)",
+      "Edit(./def_white_threshold.py)",
+      "Edit(./unique_table_values.py)",
+      "Edit(./README.md)"
+    ]
+  }
+}
