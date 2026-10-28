@@ -1,0 +1,19 @@
+{
+  "status": "PROVISÓRIA (n=2 imagens: bitbots, eliza)",
+  "origem": {
+    "branco": "Calibração B: V≥165 S≤60 H=0-179. Escolhida por equilíbrio recall/precisão nas imagens reais (avaliar_mascara_branco.py, 2026-10-27): bitbots F1_mc=0.651 (B) vs 0.709 (tophat_s40); eliza F1_mc=0.463 (B) vs 0.468 (tophat_s20). B preferido por não depender de morfologia. V_campo bitbots=62.5, eliza=134.8 (diag_b2_perp.py + diag_verde_topo_eliza.py).",
+    "verde": "H_min=45 e H_max=75 determinados por distribuição de H dos pixels verdes na máscara base (diag_verde_fundo_escuro.py + diag_h_variantes.py, 2026-10-28). H do carpete: eliza p01=52/p99=65, bitbots p01=56/p99=72. H do fundo escuro (falsos positivos eliza): p05=65/p50=88. H_max=75 cobre p99 do carpete bitbots (72) com margem; H_min=45 cobre p01 do carpete eliza (52) com margem. Restrição verificada: faixas 320-640 não reduzem mais de 3pp vs. base H=35-100 em nenhuma das duas imagens (bitbots 480-640: base=75.5%, H35-75=75.4%, Δ=-0.05pp). S e V inalterados (S≥40 V=40-180). Mediana do carpete: eliza H=58, bitbots H=65; margem estreita (H_max=75 fica a 3px de p99 bitbots); depende de calibração no local.",
+    "fator": "8 — herdado do Pixel_Segment sem alteração (main.py linhas 44-45: grid_height = height // 8; grid_width = width // 8). Não configurável pela subclasse."
+  },
+  "branco": {
+    "h_min": 0,  "h_max": 179,
+    "s_min": 0,  "s_max": 60,
+    "v_min": 165,"v_max": 255
+  },
+  "verde": {
+    "h_min": 45, "h_max": 75,
+    "s_min": 40, "s_max": 255,
+    "v_min": 40, "v_max": 180
+  },
+  "fator": 8
+}
