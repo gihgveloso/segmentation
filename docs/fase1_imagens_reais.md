@@ -87,7 +87,7 @@ Implementação: `features/segmentacao_real.py` — subclasse `PixelSegmentReal`
 Branco aplicado via monkeypatch reversível (`_patch_branco`); verde via override de
 `_criar_lut_verde`. O caminho Webots (`Pixel_Segment` direto) não é alterado.
 
-**AVISO: a faixa H 45–75 NÃO foi validada visualmente pelo usuário.**
+**Validada visualmente pelo usuário em 28/10/2026 (debug_out/*_h4575_verde_convexa.png): eliza OK (convexa acompanha a borda do carpete; fundo escuro fora). bitbots: duas ressalvas visíveis: (1) uma cunha de carpete escuro (V<40, sombra) no centro-direita ficou fora da convexa, até y≈570; (2) a convexa sobe até y≈95 na rede branca do gol, à esquerda. Mantidas; hipótese: V_min 40 elevado demais agora que o H separa as classes, não testada.**
 Escolha baseada exclusivamente em percentis de H medidos em n=2 imagens (ver abaixo).
 
 ### Fundamento da nova faixa de H (2026-10-28)
@@ -380,6 +380,15 @@ n=1 imagem; limite de 10 células escolhido arbitrariamente.
 9. **H 45–75 não validada visualmente.** A nova faixa foi escolhida por critério métrico
    (percentis de H, restrição de ≤3 pp nas faixas 320–640) em n=2 imagens. Nenhuma
    inspeção visual das sobreposições foi realizada pelo usuário até o momento.
+
+10. **Cunha de carpete escuro fora da convexa (bitbots).** Na validação visual de 28/10/2026,
+    uma cunha de carpete escuro (V<40, sombra) no centro-direita da imagem bitbots ficou fora
+    da máscara convexa, até y≈570. Hipótese: V_min=40 elevado demais agora que o H separa
+    as classes; não testada.
+
+11. **Convexa sobe até a rede branca do gol (bitbots).** Na mesma validação, a convexa
+    sobe até y≈95 na região da rede branca do gol, à esquerda da imagem bitbots. Pode
+    introduzir FP brancos no topo da máscara nessa região.
 
 ---
 
