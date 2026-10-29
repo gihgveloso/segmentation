@@ -15,5 +15,11 @@
     "s_min": 40, "s_max": 255,
     "v_min": 40, "v_max": 180
   },
-  "fator": 8
+  "fator": 8,
+  "cruzamentos": {
+    "status": "PROVISÓRIA (n=2, in-sample, 2026-10-28) — limiar escolhido nas mesmas 2 imagens avaliadas",
+    "fonte": "docs/fase1_imagens_reais.md 5.5.1",
+    "angulo_stem_t_max_grau": 150,
+    "distancia_arco_geom_px": 0
+  }
 }

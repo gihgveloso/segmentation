@@ -290,6 +290,315 @@ trave) que estão dentro da convexa mas acima do horizonte.
 **Branco de objetos sobre o campo (robôs, postes) permanece** e não é filtrado pela
 convexa; o tratamento desses FP está previsto na Fase 3 (mascaramento com YOLO).
 
+### 5.5 Avaliação de cruzamentos com gabarito real (n=4 pontos)
+
+Fonte: `python3 avaliar_cruzamentos.py --reais` (2026-10-28).
+Gabarito: `tests/gabarito_cruzamentos_reais.json` (4 pontos anotados manualmente).
+Calibração: `calibracao/real_provisoria_n2.json`. Parâmetros: `ConfigCruzamento` default.
+Diagnóstico detalhado: `scripts/diagnostico/diag_nos_gabarito_reais.py`.
+Sobreposições: `debug_out/bitbots_diag_gabarito.png`, `debug_out/eliza_diag_gabarito.png`.
+
+**Definição de coordenadas:** os pontos do gabarito e as detecções estão em
+**células da grade subamostrada** (fator 8; 80×80 células para imagens 640×640).
+Um ponto (x, y) na grade corresponde aproximadamente ao pixel (x×8, y×8) na imagem original.
+
+#### Tabela do avaliador --reais (TOTAL)
+
+| Métrica | Valor |
+|---------|-------|
+| GT total | 4 |
+| Detecções total | 15 |
+| TP (localização, tol=6 cél) | 2 |
+| FP | 13 |
+| FN | 2 |
+| Precisão (loc) | 13% |
+| Revocação (loc) | 50% |
+
+Por tipo:
+
+| Tipo | GT | Det | TP | FP | FN | Prec | Rev |
+|------|----|----|----|----|----|----|-----|
+| L | 2 | 14 | 2 | 12 | 0 | 14% | 100% |
+| T | 2 | 0  | 0 | 0  | 2 | — | 0% |
+| X | 0 | 1  | 0 | 1  | 0 | 0% | — |
+
+Por imagem:
+
+| Imagem | GT | Det | TP (loc) |
+|--------|----|----|---------|
+| bitbots | 2 | 10 | 1 |
+| eliza   | 2 | 5  | 1 |
+
+**Aviso: n=4 pontos do gabarito não têm validade estatística.** Os valores de precisão e
+revocação são indicativos do comportamento nas duas imagens com a calibração provisória;
+não generalizam para o conjunto real.
+
+#### Análise por ponto do gabarito
+
+**bitbots L(35,55) — OK.**
+Nó mais próximo: (35,55), grau=2, dist=0 cél. Sobrevive a toda simplificação.
+Detectado como L. TP(loc) ✓ TP(tipo) ✓.
+
+**bitbots T(8,41) — FALHA na geometria.**
+Nó mais próximo: (8,42), grau=3, dist=1.0 cél. Sobrevive a toda simplificação.
+V1=1.00 (3 segmentos brancos em todos os 4 raios), V2=1.00, conf=1.000.
+Borda D29: x−r_max = 0 ≥ 0 → não rejeitado por borda.
+Rejeitado em `_verifica_geometria_t` (chamado em `classificar_candidatos`),
+antes de entrar em `detectar_cruzamentos`. Não aparece em `debug_info`.
+
+Braços e ângulos:
+
+| Par | Ângulo | Critério barra (≥140°) | Critério stem vs outro braço |
+|-----|--------|----------------------|------------------------------|
+| braço0→(33,55) ↔ braço1→(6,42) | 152,5° | BARRA OK | stem=braço2: 146,3° vs braço1 > 130° **FALHA** |
+| braço1→(6,42) ↔ braço2→(20,34) | 146,3° | BARRA OK | stem=braço0: 152,5° vs braço1 > 130° **FALHA** |
+| braço0→(33,55) ↔ braço2→(20,34) | 61,2°  | insuf    | — |
+
+Restrição vinculante medida: em ambos os pares de barra válidos, o stem faz ângulo
+>130° com um dos braços da barra. Causa subjacente — curvatura da barra por perspectiva
+e/ou geometria real do cruzamento — em teste (ver 5.5.1).
+
+**eliza L(30,54) — OK.**
+Nó mais próximo: detectado como L dentro da tolerância. TP(loc) ✓ TP(tipo) ✓.
+
+**eliza T(48,43) — FALHA na geometria.**
+Nó mais próximo: (47,44), grau=3, dist=1.4 cél. Sobrevive a toda simplificação.
+V1=1.00 (3 branco, 2 verde em todos os raios), V2=1.00, conf=1.000.
+Borda D29: não rejeitado.
+Rejeitado em `_verifica_geometria_t`; não aparece em `debug_info`.
+
+Braços e ângulos:
+
+| Par | Ângulo | Critério barra (≥140°) | Critério stem vs outro braço |
+|-----|--------|----------------------|------------------------------|
+| braço0→(44,42) ↔ braço1→(49,44) | 146,3° | BARRA OK | stem=braço2: 135,0° vs braço1 > 130° **FALHA por 5°** |
+| braço0→(44,42) ↔ braço2→(45,46) | 78,7°  | insuf    | — |
+| braço1→(49,44) ↔ braço2→(45,46) | 135,0° | insuf    | — |
+
+Restrição vinculante medida: único par de barra válido (0↔1 = 146,3°); stem faz 135,0°
+com braço1, excedendo `angulo_stem_t_max_grau=130°` por 5°. Causa subjacente — curvatura
+da barra por perspectiva e/ou geometria real do cruzamento — em teste (ver 5.5.1).
+
+#### Nota sobre os overlays
+
+Os overlays em `debug_out/*_diag_gabarito.png` mostram:
+- Verde: pontos do gabarito.
+- Vermelho: cruzamentos aceitos.
+- Amarelo: candidato mais próximo em `debug_info` (pode não corresponder ao nó T
+  rejeitado, pois nós rejeitados em `classificar_candidatos` não entram em `debug_info`).
+
+#### 5.5.1 Sensibilidade do filtro de geometria T — medição (2026-10-28)
+
+Fonte: `scripts/diagnostico/diag_sensibilidade_geom_t.py`.
+Parâmetros alterados apenas localmente (ConfigCruzamento temporário); defaults não modificados.
+n=4 GT reais, n=12 GT Webots — sem validade estatística; orientação apenas.
+
+##### Tarefa 1: direção dos braços em escala de arco (`distancia_arco_geom_px`)
+
+`_caminhar_ate_arco` avança a partir do vizinho imediato enquanto o nó corrente for
+grau=2, acumulando distância. Para ambos os nós T reais, os vizinhos imediatos são
+folhas (grau=1) ou junções (grau≥3), que param a caminhada imediatamente, ou
+nós grau=2 geometricamente distantes (distância > d_arco) que também retornam o
+vizinho imediato. Resultado: os ângulos são invariantes a d_arco para bitbots T;
+para eliza T os ângulos mudam a partir de d_arco=5.
+
+**bitbots T(8,42) — ângulos idênticos para todos d_arco ∈ {0,5,7,10}:**
+braço0→(33,55) grau=2 a 28,2 cél (maior que qualquer d_arco testado → viz_start);
+braço1→(6,42) grau=1 (folha); braço2→(20,34) grau=4 (junção).
+
+| Par | Ângulo | Barra≥140° | stem vinculante | Necessita stem_max |
+|-----|--------|------------|-----------------|-------------------|
+| 0↔1 | 152,5° | OK | stem2↔1 = 146,3° | ≥ 147° |
+| 1↔2 | 146,3° | OK | stem0↔1 = 152,5° | ≥ 153° |
+| 0↔2 | 61,2°  | insuf | — | — |
+
+`distancia_arco_geom_px` não altera nenhum ângulo (nenhum braço tem cadeia grau=2 percorrível no intervalo testado).
+
+**eliza T(47,44) — ângulos mudam a partir de d_arco=5:**
+
+| d_arco | braço0 usado | braço2 usado | Par barra | Ângulo barra | stem2↔1 | Necessita stem_max |
+|--------|-------------|-------------|-----------|-------------|---------|-------------------|
+| 0 | (44,42) grau=2 | (45,46) grau=2 | 0↔1 | 146,3° | 135,0° | ≥ 136° |
+| ≥5 | (39,39) grau=4 | (31,54) grau=2 | 0↔1 | 148,0° | 148,0° | ≥ 149° |
+
+Com d_arco≥5, braço0 atinge a junção (39,39) a 9,4 cél; o ângulo stem piora de 135° para 148°.
+`distancia_arco_geom_px` piora a detecção do eliza T (ângulo stem aumenta).
+
+**Conclusão:** a causa não é ruído de direção. Os ângulos são determinísticos no grafo
+simplificado e violam o critério de haste independente de d_arco. A causa subjacente é
+estrutural: a barra forma ângulo < 180° (bitbots: 152,5°; eliza: 146,3°), fazendo o stem
+aparecer desalinhado com um dos braços da barra.
+
+##### Tarefa 2: varredura `angulo_stem_t_max_grau` × `distancia_arco_geom_px`
+
+W=Webots GT=12; R=Reais GT=4; tol=6 cél; W_Tdet/R_Tdet = T detectados; W_Ttt/R_Ttt = T TP tipo.
+
+| stem | arco | W_Det | W_TP_l | W_TP_t | W_FP | W_FN | W_Tdet | W_Ttt | R_Det | R_TP_l | R_TP_t | R_FP | R_FN | R_Tdet | R_Ttt | FP_T_reais |
+|------|------|-------|--------|--------|------|------|--------|-------|-------|--------|--------|------|------|--------|-------|------------|
+| 130 | 0 | 27 | 6 | 3 | 21 | 6 | 8 | 0 | 15 | 2 | 2 | 13 | 2 | 0 | 0 | — |
+| 130 | 5 | 29 | 7 | 3 | 22 | 5 | 8 | 0 | 15 | 2 | 2 | 13 | 2 | 0 | 0 | — |
+| 130 | 7 | 26 | 5 | 3 | 21 | 7 | 5 | 0 | 15 | 2 | 2 | 13 | 2 | 1 | 0 | bitbots(46,30) c=0,83 |
+| 130 | 10 | 25 | 5 | 2 | 20 | 7 | 5 | 0 | 15 | 2 | 2 | 13 | 2 | 1 | 0 | bitbots(46,30) c=0,83 |
+| 135 | 0 | 28 | 6 | 3 | 22 | 6 | 9 | 0 | 16 | 3 | 3 | 13 | 1 | 1 | 1 | — |
+| 135 | 5 | 29 | 7 | 3 | 22 | 5 | 8 | 0 | 15 | 2 | 2 | 13 | 2 | 0 | 0 | — |
+| 135 | 7 | 26 | 5 | 3 | 21 | 7 | 5 | 0 | 15 | 2 | 2 | 13 | 2 | 1 | 0 | bitbots(46,30) c=0,83 |
+| 135 | 10 | 25 | 5 | 2 | 20 | 7 | 5 | 0 | 15 | 2 | 2 | 13 | 2 | 1 | 0 | bitbots(46,30) c=0,83 |
+| 140 | 0 | 28 | 6 | 3 | 22 | 6 | 9 | 0 | 16 | 3 | 3 | 13 | 1 | 1 | 1 | — |
+| 140 | 5 | 29 | 7 | 3 | 22 | 5 | 8 | 0 | 15 | 2 | 2 | 13 | 2 | 0 | 0 | — |
+| 140 | 7 | 26 | 5 | 3 | 21 | 7 | 5 | 0 | 15 | 2 | 2 | 13 | 2 | 1 | 0 | bitbots(46,30) c=0,83 |
+| 140 | 10 | 25 | 5 | 2 | 20 | 7 | 5 | 0 | 15 | 2 | 2 | 13 | 2 | 1 | 0 | bitbots(46,30) c=0,83 |
+| 150 | 0 | 28 | 6 | 3 | 22 | 6 | 9 | 0 | 17 | 4 | 4 | 13 | 0 | 2 | 2 | — |
+| 150 | 5 | 29 | 7 | 3 | 22 | 5 | 8 | 0 | 17 | 4 | 4 | 13 | 0 | 2 | 2 | — |
+| 150 | 7 | 26 | 5 | 3 | 21 | 7 | 5 | 0 | 17 | 4 | 4 | 13 | 0 | 3 | 2 | bitbots(46,30) c=0,83 |
+| 150 | 10 | 25 | 5 | 2 | 20 | 7 | 5 | 0 | 17 | 4 | 4 | 13 | 0 | 3 | 2 | bitbots(46,30) c=0,83 |
+| 170 | 0 | 28 | 6 | 3 | 22 | 6 | 9 | 0 | 17 | 4 | 4 | 13 | 0 | 2 | 2 | — |
+| 170 | 5 | 29 | 7 | 3 | 22 | 5 | 8 | 0 | 17 | 4 | 4 | 13 | 0 | 3 | 2 | bitbots(46,30) c=0,83 |
+| 170 | 7 | 26 | 5 | 3 | 21 | 7 | 5 | 0 | 17 | 4 | 4 | 13 | 0 | 3 | 2 | bitbots(46,30) c=0,83 |
+| 170 | 10 | 25 | 5 | 2 | 20 | 7 | 5 | 0 | 17 | 4 | 4 | 13 | 0 | 3 | 2 | bitbots(46,30) c=0,83 |
+
+**Observações:**
+
+- **W_Ttt=0 para todos os stem_max** (Tarefa 4): os 2 T Webots são FN topológicos; nenhum
+  ajuste de stem_max ou arco os recupera.
+- Aumentar stem_max acrescenta T FP no Webots (W_Tdet sobe de 8 para 9) sem nenhum T TP.
+- **Única combinação que detecta os 2 T reais sem T FP real: stem=150, arco=0.**
+  (stem=150 arco=5 também detecta os 2 T, mas introduz T FP real para stem=170 arco=5.)
+- **arco≥7 introduz T FP real** bitbots(46,30) conf=0,83 para qualquer stem_max, inclusive o default.
+- **arco≥7 piora Webots**: W_TP_l cai de 6–7 para 5; W_FN aumenta de 5–6 para 7.
+- **arco=5, stem=150**: detecta ambos T reais, sem T FP real, sem degradação Webots.
+  R_FP permanece 13 (FP de tipo L e X); nenhum novo FP total é introduzido.
+- **eliza T**: com arco=0, stem_max=135 já a detecta (135,0°≤135°); com arco≥5 o ângulo
+  stem sobe para 148°, exigindo stem_max≥150 (arco≥5 piora a eliza).
+- **bitbots T**: invariante a arco; exige stem_max≥150 (ângulo stem=146,3°) para qualquer arco.
+
+**Custo de falso positivo no Webots:** com stem_max≥135 e arco=0, W_Tdet sobe de 8 para 9;
+o nó extra é FP T (posição não verificada individualmente com n=12 Webots).
+
+##### Tarefa 3: contagem de rejeições por `_verifica_geometria_t` (default)
+
+| Imagem | Grau3 | Rej_geom | %Rej | Prox_GT_any(≤6 cél) | Prox_GT-T(≤6 cél) |
+|--------|-------|----------|------|---------------------|-------------------|
+| image_1 | 5 | 5 | 100% | 3 | 0 |
+| image_2 | 10 | 5 | 50% | 1 | 0 |
+| image | 4 | 1 | 25% | 0 | 0 |
+| bitbots | 3 | 3 | 100% | 1 | 1 |
+| eliza | 2 | 2 | 100% | 1 | 1 |
+
+Rejeitados ≤6 cél de um GT-T:
+- **bitbots:** rej(8,42) ↔ GT-T(8,41) dist=1,0 cél — é o nó T GT
+- **eliza:** rej(47,44) ↔ GT-T(48,43) dist=1,4 cél — é o nó T GT
+- **image_2:** nenhum rejeitado próximo de GT-T (os 2 GT T de image_2 são FN topológicos)
+
+`_verifica_geometria_t` rejeita 100% dos nós grau=3 nas imagens reais. Os 2 GT-T reais
+são os únicos rejeitados próximos de um GT-T. Em Webots, os 2 GT-T não aparecem como
+rejeitados pelo filtro de geometria — pois nem chegam a ser nós grau=3 após simplificação.
+
+##### Tarefa 4: T FN do Webots em image_2 (grade 163×86 cél)
+
+**T(153,53) — FN topológico:**
+Nó mais próximo antes da simplificação: (154,53) grau=**2** dist=1,0 cél.
+`rem_curv` remove (154,53) (nó quase reto); substituto: (152,52) grau=2, ângulo=164,1°.
+Após toda simplificação: grau=2, ângulo=164,1° → não é candidato T nem L.
+D29: não rejeitado (dentro dos limites da grade).
+**Causa do FN:** topológica — não existe nó de grau≥3 próximo à posição GT.
+O ponto GT corresponde a uma região de linha simples no esqueleto simplificado.
+
+**T(9,45) — FN topológico:**
+Nó mais próximo antes da simplificação: (9,45) grau=**2** dist=0,0 cél.
+`rem_curv` remove (9,45); substituto: (12,46) grau=**1** (folha).
+Após toda simplificação: grau=1 → não é candidato.
+D29: não rejeitado.
+**Causa do FN:** topológica — o GT corresponde a uma folha (extremo de ramo) no esqueleto.
+
+**Contraste com os T reais:** os 2 T FN reais têm grau=3 e sobrevivem à simplificação,
+mas falham em `_verifica_geometria_t`. Os 2 T FN Webots nunca chegam a grau=3; nenhum
+ajuste de `angulo_stem_t_max_grau` ou `distancia_arco_geom_px` os recupera.
+
+**Aviso: n=4 reais, n=12 Webots. Os valores acima são indicativos, não generalizáveis.**
+
+##### Decisão provisória aplicada — D39 (2026-10-28)
+
+`angulo_stem_t_max_grau=150, distancia_arco_geom_px=0` gravados em
+`calibracao/real_provisoria_n2.json` (seção `"cruzamentos"`).
+`avaliar_cruzamentos.py --reais` lê essa seção via `_cfg_cruzamento_from_calib`
+e aplica **apenas no caminho real**; Webots usa `ConfigCruzamento()` default (130) sem alteração.
+
+**Verificação (2026-10-28):**
+- pytest: 152 passed (incluindo 3 novos testes de regressão de config).
+- Webots: Det=27, TP_loc=6, TP_tipo=3, FP_loc=21 — **idêntico ao commit 25fed10**. ✓
+
+**Resultados reais com o override (stem=150, arco=0):**
+
+TOTAL: GT=4, Det=17, TP_loc=4 (100%), TP_tipo=4 (100%), FP=13, FN=0.
+
+| Imagem | GT | Det | TP_loc | FP | FN |
+|--------|----|----|--------|----|----|
+| bitbots | 2 | 11 | 2 | 9 | 0 |
+| eliza | 2 | 6 | 2 | 4 | 0 |
+
+Por tipo (reais, tol=6 cél):
+
+| Tipo | GT | Det | TP | FP | FN | Prec | Rev |
+|------|----|----|----|----|----|----|-----|
+| L | 2 | 14 | 2 | 12 | 0 | 14% | 100% |
+| T | 2 | 2  | 2 | 0  | 0 | 100% | 100% |
+| X | 0 | 1  | 0 | 1  | 0 | 0% | — |
+
+Lista completa de detecções aceitas (stem=150, arco=0):
+
+**bitbots (11 detecções):**
+
+| tipo | x | y | conf | px_orig |
+|------|---|---|------|---------|
+| L | 25 | 24 | 1,000 | (200,192) |
+| L | 29 | 23 | 1,000 | (232,184) |
+| **L** | **35** | **55** | **1,000** | **(280,440)** ← GT |
+| L | 40 | 29 | 0,500 | (320,232) |
+| L | 40 | 32 | 1,000 | (320,256) |
+| L | 42 | 20 | 1,000 | (336,160) |
+| L | 46 | 34 | 0,750 | (368,272) |
+| L | 47 | 29 | 1,000 | (376,232) |
+| L | 49 | 19 | 1,000 | (392,152) |
+| L | 59 | 24 | 0,750 | (472,192) |
+| **T** | **8** | **42** | **1,000** | **(64,336)** ← GT |
+
+**eliza (6 detecções):**
+
+| tipo | x | y | conf | px_orig |
+|------|---|---|------|---------|
+| L | 24 | 23 | 0,750 | (192,184) |
+| **L** | **31** | **54** | **1,000** | **(248,432)** ← GT |
+| L | 46 | 35 | 1,000 | (368,280) |
+| L | 49 | 32 | 1,000 | (392,256) |
+| **T** | **47** | **44** | **1,000** | **(376,352)** ← GT |
+| X | 13 | 28 | 0,625 | (104,224) |
+
+**Ângulos do stem nos 3 T detectados (arco=0):**
+
+bitbots T(8,42): par barra 0↔1 = 152,5°; stem2↔braço0 = 61,2° ≤ 150° ✓; stem2↔braço1 = **146,3° ≤ 150° ✓**.
+eliza T(47,44): par barra 0↔1 = 146,3°; stem2↔braço0 = 78,7° ≤ 150° ✓; stem2↔braço1 = **135,0° ≤ 150° ✓**.
+Todos os ângulos de stem ficam abaixo de 150°. Sem discrepâncias.
+
+**T FP potencial com arco≥7 — bitbots(46,30):**
+Grade (46,30) → pixel original (368,240). Pixel no original: HSV=(21,17,196); classificado
+como BRANCO (S≤60, V≥165). Vizinhança 20×20: ~49% branco, 0% verde. Posição no terço
+superior-direito da imagem. **Não determinado** se é robô, trave ou linha (inspeção visual
+não disponível programaticamente). Nota: esse FP T não aparece com arco=0 (configuração
+aplicada); só emerge com arco≥7.
+
+**Ressalvas obrigatórias (D39):**
+
+1. **In-sample:** o limiar 150° foi escolhido nas mesmas 2 imagens em que é avaliado.
+   Não há conjunto de validação independente. Recall T=100% é esperado por construção.
+2. **n=2 imagens, 2 T:** sem validade estatística. Qualquer estimativa de precisão/recall
+   é pontual e não generalizável.
+3. **Filtro praticamente desligado:** com stem_max=150°, o filtro aceita hastes que fazem
+   até 150° com um braço da barra (o bitbots T vinculante tem 146,3°). Junções Y
+   ou outros artefatos com haste quase paralela a um braço da barra podem passar.
+4. **Origem das imagens desconhecida:** os sufixos dos nomes de arquivo (`b0.8 s1.0 k0`,
+   `b1.0 s1.2 k3`) não foram interpretados. A calibração pode não generalizar para
+   imagens de outras condições de iluminação ou câmeras.
+
 ---
 
 ## 6. Diagnóstico de fragmentação
@@ -404,8 +713,9 @@ n=1 imagem; limite de 10 células escolhido arbitrariamente.
 3. **eliza p3 sob dúvida.** A polilinha p3 (4.3 cel / 34 px) não produziu nenhum fragmento
    detectado. Pode ser uma linha real muito curta ou um artefato de anotação.
 
-4. **Gabarito de cruzamentos reais inexistente.** Os cruzamentos detectados (bitbots: 10,
-   eliza: 5 com H 45–75) não puderam ser avaliados como TP/FP.
+4. **Gabarito de cruzamentos reais com n=4 pontos.** `tests/gabarito_cruzamentos_reais.json`
+   foi criado em 28/10/2026 com 2 pontos por imagem (bitbots: L+T; eliza: L+T). Com n=4
+   não é possível estimar precisão/revocação com validade estatística (ver Seção 5.5).
 
 5. **n=2 imagens.** Insuficiente para calibração definitiva ou avaliação estatística.
    Mais imagens com condições de iluminação e distâncias variadas são necessárias.

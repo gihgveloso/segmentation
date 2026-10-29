@@ -1210,3 +1210,33 @@ justificado. Registrado como D38 para transparência.
 **Impacto código:** `features/lines.py::_ajustar_reta`.
 
 ---
+
+## D39 — angulo_stem_t_max_grau=150 nas imagens reais (PROVISÓRIA, 2026-10-28)
+
+**Contexto:** o filtro `_verifica_geometria_t` usa `angulo_stem_t_max_grau=130°` (default).
+Nas imagens reais bitbots e eliza, os dois nós T do gabarito falham com 130° (stem vinculante:
+bitbots 146,3°; eliza 135,0°). A varredura em `docs/fase1_imagens_reais.md §5.5.1` mostrou
+que `stem_max=150, arco=0` detecta ambos os T reais sem introduzir T FP reais.
+
+**Decisão PROVISÓRIA:** gravar `angulo_stem_t_max_grau=150` e `distancia_arco_geom_px=0`
+na seção `"cruzamentos"` de `calibracao/real_provisoria_n2.json`, lida por
+`avaliar_cruzamentos.py --reais` via `_cfg_cruzamento_from_calib`. O default do Webots
+(`ConfigCruzamento().angulo_stem_t_max_grau=130`) não é alterado.
+
+**Justificativa:** única combinação que recupera os 2 T reais sem T FP reais e sem degradar
+Webots. Mecanismo: os ângulos de stem (146,3° e 135,0°) excedem 130° porque a barra do T
+forma ângulo < 180° (perspectiva / geometria real), não por ruído de direção.
+
+**Ressalvas:**
+1. **In-sample:** limiar escolhido nas mesmas 2 imagens em que é avaliado — recall T=100% é tautológico.
+2. **n=2 imagens, 2 T:** sem validade estatística.
+3. **Filtro praticamente desligado:** stem_max=150° aceita hastes fazendo até 150° com um braço da barra; junções Y ou artefatos similares podem passar.
+4. **Origem das imagens desconhecida:** calibração pode não generalizar.
+
+**Impacto código:**
+- `calibracao/real_provisoria_n2.json`: seção `"cruzamentos"` adicionada.
+- `avaliar_cruzamentos.py`: função `_cfg_cruzamento_from_calib(calib_path)` lê a seção e aplica ao `ConfigCruzamento` no caminho `--reais`.
+- `tests/test_fluxo_reais.py`: 3 testes de regressão verificam que default=130, real=150, e JSON sem seção usa default.
+- Webots invariante: Det=27, TP_loc=6, TP_tipo=3, FP=21 (verificado 2026-10-28).
+
+---

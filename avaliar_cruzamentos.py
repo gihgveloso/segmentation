@@ -56,6 +56,25 @@ REAL_IMAGES = [
 CALIB_DEFAULT = 'calibracao/real_provisoria_n2.json'
 
 
+# --- Config de cruzamentos a partir de calibração real -----------------------
+
+def _cfg_cruzamento_from_calib(calib_path: str) -> ConfigCruzamento:
+    """Lê seção 'cruzamentos' do JSON de calibração real e devolve ConfigCruzamento.
+
+    Aplica apenas os campos presentes no JSON; o restante usa os defaults de
+    ConfigCruzamento. O caminho Webots (Pixel_Segment direto) nunca chama esta função.
+    """
+    with open(calib_path, 'r', encoding='utf-8') as f:
+        calib = json.load(f)
+    cfg = ConfigCruzamento()
+    cruz = calib.get('cruzamentos', {})
+    if 'angulo_stem_t_max_grau' in cruz:
+        cfg.angulo_stem_t_max_grau = float(cruz['angulo_stem_t_max_grau'])
+    if 'distancia_arco_geom_px' in cruz:
+        cfg.distancia_arco_geom_px = int(cruz['distancia_arco_geom_px'])
+    return cfg
+
+
 # --- Pipeline ----------------------------------------------------------------
 
 def _rodar_pipeline(
@@ -376,22 +395,22 @@ def main() -> None:
         print(f'Gabarito vazio em {gabarito_path}.')
         sys.exit(0)
 
-    cfg_cruz = ConfigCruzamento()
-    if args.sem_geometria:
-        if hasattr(cfg_cruz, 'verificar_geometria_t'):
-            cfg_cruz.verificar_geometria_t = False
-        if hasattr(cfg_cruz, 'verificar_geometria_x'):
-            cfg_cruz.verificar_geometria_x = False
-    if args.sem_consenso:
-        if hasattr(cfg_cruz, 'usar_consenso_v1'):
-            cfg_cruz.usar_consenso_v1 = False
-
     if args.reais:
+        cfg_cruz = _cfg_cruzamento_from_calib(args.calib)
         from features.segmentacao_real import PixelSegmentReal
         ps = PixelSegmentReal.from_json(args.calib, 'green_pixels.csv')
         print(f'Usando PixelSegmentReal: {args.calib}')
+        print(f'  cruzamentos: angulo_stem_t_max_grau={cfg_cruz.angulo_stem_t_max_grau}'
+              f'  distancia_arco_geom_px={cfg_cruz.distancia_arco_geom_px}')
     else:
+        cfg_cruz = ConfigCruzamento()
         ps = Pixel_Segment('green_pixels.csv')
+
+    if args.sem_geometria:
+        cfg_cruz.verificar_geometria_t = False
+        cfg_cruz.verificar_geometria_x = False
+    if args.sem_consenso:
+        cfg_cruz.usar_consenso_v1 = False
 
     tolerancia = float(args.tolerancia)
     print(f'Tolerancia: {tolerancia} px subamostrados')
