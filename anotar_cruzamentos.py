@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import argparse
 from typing import Optional
 
 import cv2
@@ -43,6 +44,16 @@ IMAGES = [
     ('image_2', 'images/image_2.png'),
     ('image',   'images/image.png'),
 ]
+
+ALL_IMG_PATHS = {
+    'image_1': 'images/image_1.png',
+    'image_2': 'images/image_2.png',
+    'image':   'images/image.png',
+    'bitbots': ('images/bitbots_reality_spl_only_131-16_02_2018__'
+                '11_18_08_0117_upper_png_jpg_b0.8_s1.0_k0.jpg'),
+    'eliza':   'images/eliza_nat_light_20001_png_b1.0_s1.2_k3.jpg',
+}
+CALIB_DEFAULT = 'calibracao/real_provisoria_n2.json'
 
 # Cores por tipo (BGR)
 COR_TIPO = {
@@ -224,10 +235,13 @@ def _construir_canvas(
 def gerar_offline(
     ps: Pixel_Segment,
     gabarito: dict[str, list[dict]],
+    images=None,
+    gabarito_path: str = None,
 ) -> None:
     """Gera debug_out/anotar_<basename>.png para cada imagem."""
+    _images = images if images is not None else IMAGES
     os.makedirs('debug_out', exist_ok=True)
-    for basename, img_path in IMAGES:
+    for basename, img_path in _images:
         if not os.path.exists(img_path):
             print(f"  [offline] {img_path} não encontrado, pulando.")
             continue
@@ -275,12 +289,16 @@ def _callback_mouse(event, x, y, flags, param):
 def _modo_interativo(
     ps: Pixel_Segment,
     gabarito: dict[str, list[dict]],
+    images=None,
+    gabarito_path: str = None,
 ) -> dict[str, list[dict]]:
     """Loop interativo por imagem. Retorna gabarito atualizado."""
+    _images = images if images is not None else IMAGES
+    _gabarito_path = gabarito_path or GABARITO_PATH
     resultado = dict(gabarito)  # cópia
 
-    n_imgs = len(IMAGES)
-    for idx, (basename, img_path) in enumerate(IMAGES):
+    n_imgs = len(_images)
+    for idx, (basename, img_path) in enumerate(_images):
         if not os.path.exists(img_path):
             print(f"  [interativo] {img_path} não encontrado, pulando.")
             continue
@@ -381,8 +399,8 @@ def _modo_interativo(
 
             elif key in (ord('s'), ord('S')):
                 resultado[basename] = list(estado.anotacoes)
-                _salvar_gabarito(resultado)
-                print(f"    Salvo: {GABARITO_PATH}  ({len(estado.anotacoes)} anotações em {basename})")
+                _salvar_gabarito(resultado, _gabarito_path)
+                print(f"    Salvo: {_gabarito_path}  ({len(estado.anotacoes)} anotações em {basename})")
                 salvar_e_continuar = True
 
             elif key in (ord('n'), ord('N')):
@@ -397,40 +415,81 @@ def _modo_interativo(
             break
 
     # Última imagem: salvar automaticamente
-    _salvar_gabarito(resultado)
-    print(f"\n  Gabarito final salvo: {GABARITO_PATH}")
+    _salvar_gabarito(resultado, _gabarito_path)
+    print(f"\n  Gabarito final salvo: {_gabarito_path}")
     return resultado
 
 
 # ─── I/O do gabarito ──────────────────────────────────────────────────────────
 
-def _carregar_gabarito() -> dict[str, list[dict]]:
-    if os.path.exists(GABARITO_PATH):
+def _carregar_gabarito(path: str = None) -> dict[str, list[dict]]:
+    _path = path or GABARITO_PATH
+    if os.path.exists(_path):
         try:
-            with open(GABARITO_PATH, 'r', encoding='utf-8') as f:
+            with open(_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            print(f"  Gabarito existente carregado: {GABARITO_PATH}")
+            print(f"  Gabarito existente carregado: {_path}")
             return data
         except (json.JSONDecodeError, OSError) as e:
-            print(f"  Aviso: não foi possível ler {GABARITO_PATH}: {e}")
+            print(f"  Aviso: não foi possível ler {_path}: {e}")
     return {}
 
 
-def _salvar_gabarito(gabarito: dict[str, list[dict]]) -> None:
-    os.makedirs(os.path.dirname(GABARITO_PATH) or '.', exist_ok=True)
-    with open(GABARITO_PATH, 'w', encoding='utf-8') as f:
+def _salvar_gabarito(gabarito: dict[str, list[dict]], path: str = None) -> None:
+    _path = path or GABARITO_PATH
+    os.makedirs(os.path.dirname(_path) or '.', exist_ok=True)
+    with open(_path, 'w', encoding='utf-8') as f:
         json.dump(gabarito, f, ensure_ascii=False, indent=2)
 
 
 # ─── Ponto de entrada ─────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description='Ferramenta de anotação de gabarito para cruzamentos L/T/X.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        '--imagens', nargs='+', metavar='NOME',
+        help=f'Nomes das imagens a processar. Disponíveis: '
+             f'{", ".join(ALL_IMG_PATHS)}. Padrão: image_1 image_2 image.',
+    )
+    parser.add_argument(
+        '--saida', default=None, metavar='JSON',
+        help=f'Arquivo de saída do gabarito. Padrão: {GABARITO_PATH}.',
+    )
+    parser.add_argument(
+        '--calib', default=None, metavar='JSON',
+        help='Calibração JSON para PixelSegmentReal (necessário para imagens reais). '
+             f'Padrão: {CALIB_DEFAULT}.',
+    )
+    args = parser.parse_args()
+
     print(__doc__)
     print("=" * 70)
 
-    ps = Pixel_Segment('green_pixels.csv')
-    gabarito = _carregar_gabarito()
+    # Resolver lista de imagens
+    if args.imagens:
+        invalidas = [n for n in args.imagens if n not in ALL_IMG_PATHS]
+        if invalidas:
+            parser.error(f'Imagens desconhecidas: {invalidas}. '
+                         f'Disponíveis: {list(ALL_IMG_PATHS)}')
+        images = [(n, ALL_IMG_PATHS[n]) for n in args.imagens]
+    else:
+        images = None  # usa IMAGES global dentro das funções
 
+    gabarito_path = args.saida or GABARITO_PATH
+
+    # Instanciar pipeline
+    if args.calib is not None:
+        from features.segmentacao_real import PixelSegmentReal
+        ps = PixelSegmentReal.from_json(args.calib, 'green_pixels.csv')
+        print(f"  Usando PixelSegmentReal: {args.calib}")
+    else:
+        ps = Pixel_Segment('green_pixels.csv')
+
+    gabarito = _carregar_gabarito(gabarito_path)
     interativo = _tem_display()
 
     if interativo:
@@ -439,15 +498,14 @@ def main() -> None:
     else:
         print("  Sem display detectado: modo OFFLINE.")
 
-    # Sempre gera as imagens offline
-    gerar_offline(ps, gabarito)
+    gerar_offline(ps, gabarito, images=images, gabarito_path=gabarito_path)
 
     if interativo:
-        gabarito = _modo_interativo(ps, gabarito)
+        gabarito = _modo_interativo(ps, gabarito, images=images, gabarito_path=gabarito_path)
 
     print("\nConcluído.")
     if not interativo:
-        print(f"  Edite {GABARITO_PATH} manualmente se necessário,")
+        print(f"  Edite {gabarito_path} manualmente se necessário,")
         print("  ou execute em um ambiente com display para o modo interativo.")
 
 

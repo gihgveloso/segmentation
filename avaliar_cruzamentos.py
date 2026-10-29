@@ -47,6 +47,14 @@ IMAGES = [
 ]
 TIPOS = ('L', 'T', 'X')
 
+REAIS_GABARITO_PATH = 'tests/gabarito_cruzamentos_reais.json'
+REAL_IMAGES = [
+    ('bitbots', ('images/bitbots_reality_spl_only_131-16_02_2018__'
+                 '11_18_08_0117_upper_png_jpg_b0.8_s1.0_k0.jpg')),
+    ('eliza',   'images/eliza_nat_light_20001_png_b1.0_s1.2_k3.jpg'),
+]
+CALIB_DEFAULT = 'calibracao/real_provisoria_n2.json'
+
 
 # --- Pipeline ----------------------------------------------------------------
 
@@ -238,6 +246,78 @@ def _imprimir_tabela_c(
           f'{prec_t:>9}  {rev_t:>9}')
 
 
+# --- Avaliação de conjunto (importável para testes) --------------------------
+
+def avaliar_conjunto(
+    gabarito: dict[str, list[dict]],
+    images: list[tuple[str, str]],
+    ps,
+    cfg_cruz: ConfigCruzamento,
+    tolerancia: float = 6.0,
+) -> dict:
+    """Avalia cruzamentos em `images` contra `gabarito`; imprime por imagem.
+
+    Retorna dicionário com acumuladores: tp, fp, fn, pares_tipo,
+    gt/det/tp_c/fp_c/fn_c por tipo e n_avaliadas.
+    """
+    acum: dict = dict(
+        tp=0, fp=0, fn=0,
+        pares_tipo=[],
+        gt={t: 0 for t in TIPOS},
+        det={t: 0 for t in TIPOS},
+        tp_c={t: 0 for t in TIPOS},
+        fp_c={t: 0 for t in TIPOS},
+        fn_c={t: 0 for t in TIPOS},
+        n_avaliadas=0,
+    )
+
+    for basename, img_path in images:
+        gt_img = gabarito.get(basename)
+        if not gt_img:
+            continue
+
+        if not os.path.exists(img_path):
+            print(f'\n[aviso] {img_path} nao encontrado; pulando {basename}.')
+            continue
+
+        print(f'\nProcessando {basename}...', end=' ', flush=True)
+        aceitos, _rej = _rodar_pipeline(img_path, ps, cfg_cruz)
+        if aceitos is None:
+            print('falha ao carregar imagem, pulando.')
+            continue
+        print(f'{len(aceitos)} deteccoes aceitas.')
+
+        a_tp, a_fp, a_fn, pares_tipo = _casar_localizacao(gt_img, aceitos, tolerancia)
+        acum['tp'] += a_tp
+        acum['fp'] += a_fp
+        acum['fn'] += a_fn
+        acum['pares_tipo'].extend(pares_tipo)
+
+        print(f'\n=== {basename} ===')
+        print('\n[A] Localizacao (qualquer tipo):')
+        _imprimir_localizacao(basename, a_tp, a_fp, a_fn)
+        print('\n[B] Classificacao dos pares casados:')
+        _imprimir_matriz_confusao(basename, pares_tipo)
+
+        resultados_c: dict[str, tuple[int, int, int, int, int]] = {}
+        for tipo in TIPOS:
+            gt_tipo  = [p for p in gt_img if p.get('tipo') == tipo]
+            det_tipo = [d for d in aceitos if d.tipo == tipo]
+            tp, fp, fn = _casar(gt_tipo, det_tipo, tolerancia)
+            resultados_c[tipo] = (len(gt_tipo), len(det_tipo), tp, fp, fn)
+            acum['gt'][tipo]   += len(gt_tipo)
+            acum['det'][tipo]  += len(det_tipo)
+            acum['tp_c'][tipo] += tp
+            acum['fp_c'][tipo] += fp
+            acum['fn_c'][tipo] += fn
+
+        print('\n[C] Por tipo (matching GT=det):')
+        _imprimir_tabela_c(basename, resultados_c)
+        acum['n_avaliadas'] += 1
+
+    return acum
+
+
 # --- Main --------------------------------------------------------------------
 
 def main() -> None:
@@ -252,30 +332,48 @@ def main() -> None:
                         help='Desativa verificacao de geometria T/X')
     parser.add_argument('--sem-consenso', action='store_true',
                         help='Desativa consenso V1')
+    parser.add_argument('--reais', action='store_true',
+                        help=f'Avalia imagens reais (bitbots, eliza) com PixelSegmentReal '
+                             f'e gabarito {REAIS_GABARITO_PATH}.')
+    parser.add_argument('--calib', default=CALIB_DEFAULT, metavar='JSON',
+                        help=f'Calibracao JSON para --reais (padrao: {CALIB_DEFAULT}).')
     args = parser.parse_args()
 
-    if not os.path.exists(GABARITO_PATH):
-        print(f'Gabarito nao encontrado: {GABARITO_PATH}')
+    # Selecionar modo
+    if args.reais:
+        gabarito_path = REAIS_GABARITO_PATH
+        images = REAL_IMAGES
+    else:
+        gabarito_path = GABARITO_PATH
+        images = IMAGES
+
+    if not os.path.exists(gabarito_path):
+        print(f'Gabarito nao encontrado: {gabarito_path}')
         print()
-        print('Para criar o gabarito, execute:')
-        print('    python anotar_cruzamentos.py')
-        print()
-        print('Em modo OFFLINE (sem display), edite manualmente:')
-        print(f'    {GABARITO_PATH}')
-        print('Formato:')
-        print('    {')
-        print('      "image_1": [{"tipo": "T", "x": 50, "y": 81}, ...],')
-        print('      "image_2": [...],')
-        print('      "image":  [...]')
-        print('    }')
+        if args.reais:
+            print('Para criar o gabarito real, execute:')
+            print('    python anotar_cruzamentos.py --imagens bitbots eliza '
+                  '--saida tests/gabarito_cruzamentos_reais.json '
+                  f'--calib {args.calib}')
+        else:
+            print('Para criar o gabarito, execute:')
+            print('    python anotar_cruzamentos.py')
+            print()
+            print('Em modo OFFLINE (sem display), edite manualmente:')
+            print(f'    {gabarito_path}')
+            print('Formato:')
+            print('    {')
+            print('      "image_1": [{"tipo": "T", "x": 50, "y": 81}, ...],')
+            print('      "image_2": [...],')
+            print('      "image":  [...]')
+            print('    }')
         sys.exit(0)
 
-    with open(GABARITO_PATH, 'r', encoding='utf-8') as f:
+    with open(gabarito_path, 'r', encoding='utf-8') as f:
         gabarito: dict[str, list[dict]] = json.load(f)
 
     if not gabarito:
-        print(f'Gabarito vazio em {GABARITO_PATH}.')
-        print('Execute python anotar_cruzamentos.py para criar anotacoes.')
+        print(f'Gabarito vazio em {gabarito_path}.')
         sys.exit(0)
 
     cfg_cruz = ConfigCruzamento()
@@ -288,100 +386,46 @@ def main() -> None:
         if hasattr(cfg_cruz, 'usar_consenso_v1'):
             cfg_cruz.usar_consenso_v1 = False
 
-    ps = Pixel_Segment('green_pixels.csv')
-    tolerancia = float(args.tolerancia)
+    if args.reais:
+        from features.segmentacao_real import PixelSegmentReal
+        ps = PixelSegmentReal.from_json(args.calib, 'green_pixels.csv')
+        print(f'Usando PixelSegmentReal: {args.calib}')
+    else:
+        ps = Pixel_Segment('green_pixels.csv')
 
+    tolerancia = float(args.tolerancia)
     print(f'Tolerancia: {tolerancia} px subamostrados')
     if args.sem_geometria:
         print('  [sem-geometria] verificacao de geometria T/X desativada')
     if args.sem_consenso:
         print('  [sem-consenso] consenso V1 desativado')
 
-    # Acumuladores para metrica A (localizacao)
-    acum_a_tp = acum_a_fp = acum_a_fn = 0
-    acum_pares_tipo: list[tuple[str, str]] = []
+    acum = avaliar_conjunto(gabarito, images, ps, cfg_cruz, tolerancia)
 
-    # Acumuladores para metrica C (por tipo)
-    acum_gt  = {t: 0 for t in TIPOS}
-    acum_det = {t: 0 for t in TIPOS}
-    acum_tp  = {t: 0 for t in TIPOS}
-    acum_fp  = {t: 0 for t in TIPOS}
-    acum_fn  = {t: 0 for t in TIPOS}
-
-    imagens_avaliadas = 0
-
-    for basename, img_path in IMAGES:
-        gt_img = gabarito.get(basename)
-        if not gt_img:
-            continue
-
-        if not os.path.exists(img_path):
-            print(f'\n[aviso] {img_path} nao encontrado; pulando {basename}.')
-            continue
-
-        print(f'\nProcessando {basename}...', end=' ', flush=True)
-        aceitos, rejeitados = _rodar_pipeline(img_path, ps, cfg_cruz)
-        if aceitos is None:
-            print('falha ao carregar imagem, pulando.')
-            continue
-        print(f'{len(aceitos)} deteccoes aceitas.')
-
-        # --- Metrica A: localizacao (qualquer tipo) ---------------------------
-        a_tp, a_fp, a_fn, pares_tipo = _casar_localizacao(gt_img, aceitos, tolerancia)
-        acum_a_tp += a_tp
-        acum_a_fp += a_fp
-        acum_a_fn += a_fn
-        acum_pares_tipo.extend(pares_tipo)
-
-        print(f'\n=== {basename} ===')
-
-        print('\n[A] Localizacao (qualquer tipo):')
-        _imprimir_localizacao(basename, a_tp, a_fp, a_fn)
-
-        # --- Metrica B: classificacao dos pares de A -------------------------
-        print('\n[B] Classificacao dos pares casados:')
-        _imprimir_matriz_confusao(basename, pares_tipo)
-
-        # --- Metrica C: por tipo (original) ----------------------------------
-        resultados_c: dict[str, tuple[int, int, int, int, int]] = {}
-        for tipo in TIPOS:
-            gt_tipo  = [p for p in gt_img if p.get('tipo') == tipo]
-            det_tipo = [d for d in aceitos if d.tipo == tipo]
-            tp, fp, fn = _casar(gt_tipo, det_tipo, tolerancia)
-            resultados_c[tipo] = (len(gt_tipo), len(det_tipo), tp, fp, fn)
-
-            acum_gt[tipo]  += len(gt_tipo)
-            acum_det[tipo] += len(det_tipo)
-            acum_tp[tipo]  += tp
-            acum_fp[tipo]  += fp
-            acum_fn[tipo]  += fn
-
-        print('\n[C] Por tipo (matching GT=det):')
-        _imprimir_tabela_c(basename, resultados_c)
-
-        imagens_avaliadas += 1
-
-    if imagens_avaliadas == 0:
+    if acum['n_avaliadas'] == 0:
         print('\nNenhuma imagem com gabarito foi encontrada/processada.')
-        print('Execute python anotar_cruzamentos.py para criar anotacoes.')
+        if args.reais:
+            print('Execute python anotar_cruzamentos.py --imagens bitbots eliza '
+                  '--saida tests/gabarito_cruzamentos_reais.json para criar anotacoes.')
+        else:
+            print('Execute python anotar_cruzamentos.py para criar anotacoes.')
         sys.exit(0)
 
-    if imagens_avaliadas > 1:
+    if acum['n_avaliadas'] > 1:
         print('\n' + '=' * 50)
         print('=== TOTAL (todas as imagens) ===')
 
         print('\n[A] Localizacao (qualquer tipo):')
-        _imprimir_localizacao('TOTAL', acum_a_tp, acum_a_fp, acum_a_fn)
+        _imprimir_localizacao('TOTAL', acum['tp'], acum['fp'], acum['fn'])
 
         print('\n[B] Classificacao dos pares casados:')
-        _imprimir_matriz_confusao('TOTAL', acum_pares_tipo)
+        _imprimir_matriz_confusao('TOTAL', acum['pares_tipo'])
 
-        resultados_c_glob: dict[str, tuple[int, int, int, int, int]] = {}
-        for tipo in TIPOS:
-            resultados_c_glob[tipo] = (
-                acum_gt[tipo], acum_det[tipo],
-                acum_tp[tipo], acum_fp[tipo], acum_fn[tipo],
-            )
+        resultados_c_glob: dict[str, tuple[int, int, int, int, int]] = {
+            tipo: (acum['gt'][tipo], acum['det'][tipo],
+                   acum['tp_c'][tipo], acum['fp_c'][tipo], acum['fn_c'][tipo])
+            for tipo in TIPOS
+        }
         print('\n[C] Por tipo (matching GT=det):')
         _imprimir_tabela_c('TOTAL', resultados_c_glob)
 

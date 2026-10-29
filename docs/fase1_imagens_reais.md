@@ -245,6 +245,51 @@ Cobertura do gabarito pelas linhas extraídas (d≤25px, poly_0 / poly_1 / poly_
 - bitbots: 98.7% / 100.0% / 100.0%
 - eliza:   100.0% / 78.9% / 94.4%  (eliza poly_1: polilinha curva, sub-cobertura esperada)
 
+### 5.4 Branco e esqueleto acima do horizonte
+
+Fonte: `scripts/medir_branco_acima_horizonte.py`; horizonte: `tests/gabarito_horizonte.json`.
+Calibração: `calibracao/real_provisoria_n2.json`. Resolução original (640×640 px).
+
+| Métrica | bitbots | eliza |
+|---------|---------|-------|
+| Horizonte (pontos anotados) | 4 pontos | 3 pontos |
+| Horizonte y mín / y máx (px orig) | 127 / 233 | 185 / 285 |
+| Branco total (px) | 54 859 | 43 557 |
+| Acima do horizonte (px / % do total) | 21 104 (38,5%) | 25 299 (58,1%) |
+| — dentro da convexa | 9 160 (43,4% do acima) | 2 073 (8,2% do acima) |
+| — fora da convexa | 11 944 (56,6% do acima) | 23 226 (91,8% do acima) |
+| Abaixo do horizonte (px / % do total) | 33 755 (61,5%) | 18 258 (41,9%) |
+| — dentro da convexa | 31 213 (92,5% do abaixo) | 18 212 (99,7% do abaixo) |
+| — fora da convexa | 2 542 (7,5% do abaixo) | 46 (0,3% do abaixo) |
+| Esqueleto total (px orig, grade×8) | 24 832 | 33 984 |
+| Esqueleto acima do horizonte | 643 (2,6%) | 4 677 (13,8%) |
+| Esqueleto abaixo do horizonte | 24 189 (97,4%) | 29 307 (86,2%) |
+
+**Avisos:**
+
+1. **Horizonte aproximado.** A reta é definida por 3–4 pontos anotados manualmente com
+   `scripts/anotar_horizonte.py` e interpolada linearmente por coluna. É uma aproximação
+   grosseira do horizonte real; perspectiva e distorção da câmera não são corrigidas.
+
+2. **Robôs e trave sobre o campo contam como "acima".** Objetos em pé sobre o campo que
+   ultrapassam a reta do horizonte (robôs, trave) têm seus pixels brancos contabilizados
+   como "acima do horizonte", mesmo que estejam projetados sobre o campo. A medição não
+   distingue esses objetos de branco do fundo.
+
+3. **Esqueleto em pixels originais, não comparável 1:1 com branco.** O esqueleto é contado
+   após redimensionamento da grade (fator 8) de volta à resolução original via
+   `cv2.INTER_NEAREST`; cada célula de grade vira um bloco 8×8 px. O número de "pixels de
+   esqueleto" não é diretamente comparável ao número de pixels brancos.
+
+**Convexa como filtro de fundo (eliza):** 91,8% do branco acima do horizonte fica
+*fora* da convexa; 99,7% do branco abaixo fica *dentro*. A convexa funciona como filtro
+eficaz de pixels de fundo no eliza. No bitbots esse filtro é menos efetivo (56,6% do
+branco acima fica fora), provavelmente devido a objetos brancos sobre o campo (robôs,
+trave) que estão dentro da convexa mas acima do horizonte.
+
+**Branco de objetos sobre o campo (robôs, postes) permanece** e não é filtrado pela
+convexa; o tratamento desses FP está previsto na Fase 3 (mascaramento com YOLO).
+
 ---
 
 ## 6. Diagnóstico de fragmentação
