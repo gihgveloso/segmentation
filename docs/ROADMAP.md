@@ -16,15 +16,36 @@ Hoje só calibramos e avaliamos no Webots. O alvo são imagens reais.
 - Rodar o avaliador existente nesse conjunto. Os números do Webots deixam de ser a referência.
 Critério: >= N imagens reais com esqueleto utilizável e gabarito anotado (N a definir).
 
-**Status (2026-10-27) — ver `docs/fase1_imagens_reais.md` para fatos completos:**
+**Status (2026-10-27; atualizado em 2026-10-29 com medições de 28/10: calibração verde
+passou de H 35–100 para H 45–75; gabarito de cruzamentos criado; horizonte anotado;
+D39 aplica angulo_stem_t_max_grau=150 no caminho real — ver Seções 4, 5.4, 5.5.1 de
+`docs/fase1_imagens_reais.md`) — ver `docs/fase1_imagens_reais.md` para fatos completos:**
 - ✅ 2 imagens reais disponíveis (bitbots, eliza, 640×640 px).
 - ✅ Calibração provisória implementada (`calibracao/real_provisoria_n2.json`,
   `features/segmentacao_real.py`); F1_mc branco: bitbots=0.651, eliza=0.463.
+  (atualizado em 2026-10-29: valores por método e calibração:
+  — `avaliar_mascara_branco.py --com-convexa` com convexa default (H 35–100):
+    bitbots=0.651, eliza=0.463.
+  — `diag_h4575_pipeline.py` com PixelSegmentReal (H 45–75):
+    bitbots=0.652, eliza=0.714 (Seção 4 de `docs/fase1_imagens_reais.md`).
+  Os dois pares diferem em ferramenta E em faixa de H do verde (convexa), portanto a
+  diferença não está isolada. Experimento controlado em /tmp (mesma lógica de
+  `diag_h4575_pipeline.py`, apenas H variado, sem gravar no repo):
+    H 45–75: bitbots=0.652, eliza=0.718; H 35–100: bitbots=0.651, eliza=0.466.
+  A diferença eliza (0.466→0.718) é atribuível à mudança de H: com H 35–100 a convexa
+  se estende ao topo (y_gauss_min=0.00); com H 45–75 recua (y_gauss_min=20.01).
+  Para bitbots a diferença é desprezível (0.651→0.652).
+  Nota: `diag_h4575_pipeline.py` cita 0.714 para eliza; o experimento controlado obteve
+  0.718 com a mesma lógica — discrepância de 0.004 não investigada.)
 - ✅ Gabarito de linhas anotado (3 polilinhas por imagem, `tests/gabarito_linhas.json`);
   cobertura pelo esqueleto: bitbots 93%, eliza 96%.
 - ✅ Features extraídas e diagnosticadas (cruzamentos, linhas, fragmentação).
-- ❌ Gabarito de cruzamentos reais: inexistente.
-- ❌ Horizonte não anotado; fração de branco acima do campo não medida.
+- ✅ Gabarito de cruzamentos reais: `tests/gabarito_cruzamentos_reais.json` (4 pontos, n=4 sem
+  validade estatística; avaliador em Seção 5.5 de `docs/fase1_imagens_reais.md`).
+  (atualizado em 2026-10-29: antes "inexistente")
+- ✅ Horizonte anotado (`tests/gabarito_horizonte.json`); fração de branco acima do campo medida
+  (ver Seção 5.4 de `docs/fase1_imagens_reais.md`).
+  (atualizado em 2026-10-29: antes "horizonte não anotado; fração não medida")
 - ❌ eliza p2 precisa ser re-anotada como duas retas; p3 sob dúvida.
 - ❌ n=2 imagens (insuficiente); mais imagens necessárias.
 
@@ -44,6 +65,7 @@ Passo 1 — Ferramenta manual assistida (prioridade):
   real_provisoria_n2.json (com data, imagens usadas, status).
 - Meta de uso: poucos minutos, com validação visual obrigatória antes de gravar.
 - Integração: SegmentacaoReal lê o JSON escolhido.
+  (atualizado em 2026-10-29: a classe se chama `PixelSegmentReal` — `features/segmentacao_real.py:44`)
 
 Passo 2 — Estimação automática (depois, só com muitas imagens reais):
 - Verde: pico dominante do histograma de H na região inferior da imagem (assumindo campo).

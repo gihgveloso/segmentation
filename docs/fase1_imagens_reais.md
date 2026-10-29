@@ -1,6 +1,10 @@
 # Fase 1 — Imagens reais da RoboCup: fatos medidos
 
 Data da medição: 2026-10-27.
+(atualizado em 2026-10-29: há medições e ajustes adicionais de 2026-10-28 — ver Seções 4, 5.4,
+5.5, 5.5.1. A frase "sem ajuste de parâmetros do detector" vale para os dados de 27/10; a
+Seção 5.5.1 documenta a decisão D39 que aplica angulo_stem_t_max_grau=150 no caminho real,
+in-sample, a partir de 28/10/2026.)
 Todos os valores abaixo foram produzidos pelos scripts indicados, sem ajuste de parâmetros
 do detector; a calibração foi escolhida entre candidatos por métrica (ver Seção 8).
 
@@ -118,6 +122,12 @@ A separação de classes depende de calibração no local; pode variar com ilumi
 
 Verificação: `pytest` 145/145 e avaliador Webots (Det=27 TP(loc)=6 TP(tipo)=3) sem
 alteração após a mudança do JSON (o caminho Webots usa `green_pixels.csv`, não o JSON).
+(na data; 152 passed em 2026-10-28, ver 5.5.1, que cita 3 testes novos de config;
+decomposição por commit git: 145→149 em 072fe5bc (4 testes adicionados em
+`test_fluxo_reais.py`: test_casar_localizacao_basico, test_casar_distancia,
+test_casar_localizacao_vazio, test_fluxo_gabarito_temporario); 149→152 em a88fb1c
+(3 testes de config em `test_fluxo_reais.py`: test_default_config_stem_max_invariante,
+test_cfg_cruzamento_from_calib_carrega_150, test_cfg_cruzamento_from_calib_sem_secao).)
 
 ### Qualidade da máscara branca com convexa H 45–75
 
@@ -199,6 +209,8 @@ Fonte: `diag_h4575_pipeline.py` e `diag_fragmentacao.py`.
 | Linhas extraídas | 15 | 14 |
 
 Não há gabarito de cruzamentos para imagens reais.
+(atualizado em 2026-10-29: gabarito criado em 28/10/2026 — `tests/gabarito_cruzamentos_reais.json`,
+4 pontos; avaliador e análise na Seção 5.5.)
 
 #### 5.3.1 Classificação por fração de comprimento
 
@@ -705,6 +717,8 @@ n=1 imagem; limite de 10 células escolhido arbitrariamente.
 1. **Horizonte não anotado.** `scripts/anotar_horizonte.py` foi criado mas não executado
    (requer display). Sem horizonte, não é possível medir fração de branco acima do campo
    (`scripts/medir_branco_acima_horizonte.py`) nem avaliar falsos positivos acima do campo.
+   **RESOLVIDO (2026-10-29):** horizonte anotado em `tests/gabarito_horizonte.json`; branco e
+   esqueleto acima do campo medidos na Seção 5.4.
 
 2. **eliza p2 precisa ser re-anotada como duas retas.** A polilinha p2 atual é curva;
    o maior fragmento detectado (36.3 cel) é classificado como ramo com 21.0° quando se usa
@@ -735,6 +749,8 @@ n=1 imagem; limite de 10 células escolhido arbitrariamente.
 9. **H 45–75 não validada visualmente.** A nova faixa foi escolhida por critério métrico
    (percentis de H, restrição de ≤3 pp nas faixas 320–640) em n=2 imagens. Nenhuma
    inspeção visual das sobreposições foi realizada pelo usuário até o momento.
+   **RESOLVIDO (2026-10-29):** validação visual realizada pelo usuário em 28/10/2026 (ver
+   bloco em negrito na Seção 4); ressalvas documentadas nos itens 10 e 11.
 
 10. **Cunha de carpete escuro fora da convexa (bitbots).** Na validação visual de 28/10/2026,
     uma cunha de carpete escuro (V<40, sombra) no centro-direita da imagem bitbots ficou fora
@@ -754,3 +770,15 @@ Todos os parâmetros de `ConfigGrafo`, `ConfigLinhas`, `ConfigCruzamento` e
 A calibração `calibracao/real_provisoria_n2.json` foi escolhida entre 3 candidatos (A, B, C)
 por recall centerline e precisão do avaliador (F1_mc), SEM validação visual do usuário,
 e é provisória (n=2).
+
+(atualizado em 2026-10-29:)
+
+**Estado atual da calibração e dos parâmetros:**
+- Calibração verde: H 45–75 S≥40 V 40–180 (escolhida por percentis de H em n=2 imagens;
+  validada visualmente pelo usuário em 28/10/2026 com ressalvas documentadas nos itens 10 e 11
+  da Seção 7 — ver Seção 4).
+- Calibração branco: V≥165 S≤60 H=0–179 (candidato B; escolhido por F1_mc; n=2).
+- `ConfigGrafo`, `ConfigLinhas`, `ConfigSimplificacao`: todos os valores padrão.
+- `ConfigCruzamento`: valores padrão **no caminho Webots**; no caminho real (`--reais`),
+  `angulo_stem_t_max_grau=150` (default=130) — decisão D39, in-sample, 2026-10-28;
+  `distancia_arco_geom_px=0` (padrão). Ver Seção 5.5.1.
