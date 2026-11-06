@@ -1240,3 +1240,117 @@ forma ângulo < 180° (perspectiva / geometria real), não por ruído de direç�
 - Webots invariante: Det=27, TP_loc=6, TP_tipo=3, FP=21 (verificado 2026-10-28).
 
 ---
+
+## D40 — Sem seção 'cruzamentos' no JSON gerado por calibracao_cor.py
+
+**Decisão:** `montar_json` em `features/calibracao_cor.py` não inclui a chave `'cruzamentos'`
+no JSON de saída.
+
+**Por quê:** `_cfg_cruzamento_from_calib` (avaliar_cruzamentos.py) usa `calib.get('cruzamentos', {})`
+e devolve `ConfigCruzamento()` com todos os defaults quando a chave está ausente. Os parâmetros de
+cruzamento (angulo_stem_t_max_grau, distancia_arco_geom_px) não foram validados em imagens reais novas;
+incluí-los sugeriria uma calibração de cruzamentos que não existe. O JSON de calibracao_cor serve apenas
+para as faixas HSV de cor.
+
+**Impacto:** `test_json_sem_cruzamentos` verifica a ausência. `test_json_cfg_cruzamento_defaults`
+verifica que _cfg_cruzamento_from_calib devolve ConfigCruzamento() default ao ler o JSON gerado.
+
+---
+
+## D41 — Percentis+margem como estimador provisório de faixas HSV
+
+**Decisão:** `estimar_calibracao` usa percentil(p_baixo) − margem e percentil(p_alto) + margem
+para cada canal, com defaults p_baixo=1, p_alto=99, margens=3. Para branco: p_linha_v_baixo=5,
+p_linha_s_alto=95, margens=5.
+
+**Por quê:** estimador simples, interpretável e ajustável. Robusto a outliers leves (percentis
+descontam as caudas). Os parâmetros ficam em `ParametrosEstimacao` (dataclass), sem números mágicos
+no corpo da função. Alternativas (Gaussian fit, GMM) aumentariam complexidade sem ganho validado.
+
+**Ressalvas:** NÃO validado fora das 2 imagens de treino (bitbots e eliza). Marcado como PROVISÓRIO
+na docstring de ParametrosEstimacao.
+
+**Impacto:** `features/calibracao_cor.py::estimar_calibracao`. Testes em `test_estimar_calibracao_valores_exatos`.
+
+---
+
+## D42 — Avisos de sanidade não bloqueiam o fluxo
+
+**Decisão:** `verificar_sanidade` retorna `list[Aviso]` e nunca levanta exceção, mesmo para avisos
+de nível `'grave'`. A decisão de prosseguir ou abortar é do usuário/chamador.
+
+**Por quê:** `calibracao_cor` é uma ferramenta assistida: o usuário inspeciona visualmente e decide.
+Avisos `'grave'` sinalizam condições sérias (p.ex. campo não detectado; a sobreposição só em V deixou de ser aviso, ver D45) mas
+não impedem o salvamento — o usuário pode querer salvar e investigar. Os limiares são provisórios
+(n=2 imagens) e podem ser conservadores ou liberais dependendo do contexto.
+
+**Impacto:** `features/calibracao_cor.py::verificar_sanidade`.
+
+---
+
+## D43 — Limiares de sanidade provisórios (n=2 imagens: bitbots e eliza)
+
+**Decisão:** as constantes LIMIAR_PROVISORIO_* foram escolhidas com base em apenas 2 imagens reais
+(bitbots e eliza). Os valores de referência de overlap (REFERENCIA_OVERLAP_BITBOTS_FRACAO=0.00026,
+REFERENCIA_OVERLAP_ELIZA_FRACAO=0.00064) foram medidos in-sample em 2026-10-29.
+
+**Por quê:** sem mais dados disponíveis, usar os valores medidos como referência qualitativa. Os nomes
+das constantes incluem "PROVISORIO" para sinalizar isso explicitamente. Os limiares são parâmetros de
+módulo (não hardcoded dentro das funções) para facilitar ajuste futuro.
+
+**Impacto:** `features/calibracao_cor.py`: constantes LIMIAR_PROVISORIO_* e REFERENCIA_OVERLAP_*.
+
+---
+
+## D44 — criar_segmentador com CSV temporário (PixelSegmentReal exige lut_csv)
+
+**Decisão:** quando `lut_csv=None`, `criar_segmentador` cria um arquivo CSV mínimo (`H,S,V\n0,0,0\n`)
+em `tempfile` e reutiliza o mesmo arquivo entre chamadas (variável de módulo `_lut_csv_tmp`).
+
+**Por quê:** `PixelSegmentReal.__init__` herda de `Pixel_Segment` que faz `pd.read_csv(lut_csv)` no
+`__init__`. Não há como contornar a leitura do CSV sem alterar o código do colega. No entanto,
+`PixelSegmentReal._criar_lut_verde` IGNORA o CSV completamente — constrói o LUT a partir de
+`self._calib_verde`. O CSV mínimo é necessário apenas para satisfazer o `pd.read_csv`. Verificado
+empiricamente: o LUT gerado por `PixelSegmentReal(calib, csv_tmp)` é idêntico ao de
+`PixelSegmentReal(calib, 'green_pixels.csv')` (teste `test_json_from_json_lut_igual`).
+
+**Impacto:** `features/calibracao_cor.py::_get_lut_csv_tmp` e `criar_segmentador`.
+
+---
+
+## D45 — fracao_carpete_na_caixa_branca substitui separacao_v como aviso de sanidade
+
+**Decisão (2026-10-29):** `verificar_sanidade` não gera mais aviso pelo campo `separacao_v`
+(v_min_branco − p99(V_carpete)). Em vez disso, calcula `fracao_carpete_na_caixa_branca` e
+`fracao_negativos_na_caixa_branca` (via `_recall_em_caixa` contra a caixa HSV do branco) e emite
+aviso `'atencao'` (não `'grave'`) se > LIMIAR_PROVISORIO_CARPETE_NA_BRANCA = 0.01 (PROVISÓRIO, n=2).
+
+**Por quê:** `separacao_v` compara apenas o canal V, ignorando o S. O carpete do eliza tem V≈100
+(dentro da caixa branca por V) mas S≈128–200 (fora da caixa branca por S, que exige S≤60). Portanto
+`separacao_v` negativo não implica sobreposição real: pode haver contaminação zero na caixa HSV
+completa. A medição direta `fracao_carpete_na_caixa_branca` considera H, S e V juntos e é a
+métrica correta. Nível 'atencao' (não 'grave') porque o limiar é provisório e a calibração pode
+ser correta em S mesmo com V sobreposto.
+
+**Impacto:** `features/calibracao_cor.py::verificar_sanidade`, `ResultadoPreview` (2 novos campos),
+`avaliar_calibracao`. Código `SEPARACAO_V_NULA_OU_NEGATIVA` (grave) removido.
+Testes: `test_verificar_sanidade_separacao_v_nao_gera_aviso`, `test_verificar_sanidade_carpete_na_branca_*`.
+
+---
+
+## D46 — Padronização de unidades: overlap como fração (não percentagem)
+
+**Decisão (2026-10-29):** Campo `overlap_pct` renomeado para `overlap_fracao` em `ResultadoPreview`;
+constantes `REFERENCIA_OVERLAP_BITBOTS_PCT` / `REFERENCIA_OVERLAP_ELIZA_PCT` renomeadas para
+`REFERENCIA_OVERLAP_BITBOTS_FRACAO` / `REFERENCIA_OVERLAP_ELIZA_FRACAO`. Todas armazenam frações
+(0–1), não percentagens (0–100). A exibição como % ocorre apenas na mensagem do aviso OVERLAP_INFO.
+
+**Por quê:** as constantes valiam 0.00026 e 0.00064 mas tinham sufixo `_PCT`, o que sugeria valores
+percentuais (0.026% e 0.064%). O campo `overlap_pct` também armazenava uma fração. A inconsistência
+entre nome e valor é uma fonte de erro: um leitor esperaria `_PCT = 0.026` (em %). Todos os pontos
+foram alinhados para usar frações com nomes `_FRACAO` / `_fracao`.
+
+**Impacto:** `features/calibracao_cor.py` (constantes, dataclass, avaliar_calibracao, verificar_sanidade).
+Teste `test_referencia_overlap_sao_fracoes` pina os valores e a semântica.
+
+---
