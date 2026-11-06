@@ -614,3 +614,22 @@ def test_referencia_overlap_sao_fracoes():
     # Valores exatos (inventário 29/10/2026)
     assert abs(REFERENCIA_OVERLAP_BITBOTS_FRACAO - 0.00026) < 1e-10
     assert abs(REFERENCIA_OVERLAP_ELIZA_FRACAO - 0.00064) < 1e-10
+
+
+def test_defaults_g2w3_d47():
+    """D47: defaults de ParametrosEstimacao correspondem ao estimador G2W3 (provisório, n=2 imagens).
+
+    Verde G2: percentis p5/p95 com margem 15 em S e V, margem 3 em H.
+    Branco W3: p_linha_v_baixo=1, p_linha_s_alto=99, margem_branco_s=10, margem_branco_v=10.
+    """
+    from features.calibracao_cor import ParametrosEstimacao
+    p = ParametrosEstimacao()
+    assert p.p_baixo == 5
+    assert p.p_alto == 95
+    assert p.margem_h == 3
+    assert p.margem_s == 15
+    assert p.margem_v == 15
+    assert p.p_linha_v_baixo == 1
+    assert p.p_linha_s_alto == 99
+    assert p.margem_branco_s == 10
+    assert p.margem_branco_v == 10

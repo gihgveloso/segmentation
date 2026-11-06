@@ -44,3 +44,30 @@ docs/decisoes.md  # toda interpretação de trecho ambíguo do artigo, com justi
 - NÃO fazer commit nem push. Quem commita sou eu, só no final.
 - Antes de dizer que terminou: rodar `pytest` e `git diff --name-only base-original` e confirmar
   que só aparecem arquivos novos.
+
+
+# Regras do projeto (segmentation / localização por linhas)
+
+## Proibido
+- NUNCA fazer git add / commit / push / reset / checkout / stash / rebase / clean. Quem commita é a Giovanna.
+- NÃO alterar main.py, test.py, def_white_threshold.py, unique_table_values.py, README.md. Se precisar de algo desses arquivos, PARE e pergunte (ver regra acima).
+- NÃO instalar pacotes sem registrar no relatório.
+- cv2.resize: sempre interpolation= por keyword (o flag posicional vira dst e usa bilinear).
+
+## Invariantes
+- Baseline Webots deve permanecer idêntico: GT12 / Det27 / TP6 / TPtipo3 / FP21 / FN6. Comando: python3 avaliar_cruzamentos.py
+- Suíte completa verde: python -m pytest -q -rs (reportar nº de testes e quais foram SKIPPED).
+
+## Evidência
+- Todo número em doc, relatório ou commit message cita o arquivo (e linha/tabela) de onde veio. Sem fonte, é "HIPÓTESE (não verificada)".
+- Medições e scripts temporários ficam em ~/medicoes_calibracao (fora do repo). Jobs longos: setsid nohup python -u ... > log 2>&1 &, com resultados parciais em disco.
+
+## Relatório padrão (obrigatório ao fim de TODA tarefa)
+Escreva RELATORIO.md em ~/medicoes_calibracao/ (fora do repo) e imprima o conteúdo no terminal, com:
+1. Arquivos criados/alterados (git status --short e git diff --stat colados).
+2. Nº de testes antes/depois e SKIPPED (pytest -rs).
+3. Baseline Webots (saída literal).
+4. MEDIDO / LIMITAÇÕES / HIPÓTESES / PERGUNTAS EM ABERTO.
+5. Decisões que você tomou por conta própria (marque como tal).
+6. O que precisa de olho humano.
+Não resolva por conta própria ambiguidade de produto: liste como pergunta.

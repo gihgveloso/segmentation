@@ -115,15 +115,15 @@ def reamostrar(
 @dataclass
 class ParametrosEstimacao:
     """PROVISÓRIO — derivado de n=2 imagens (bitbots, eliza)."""
-    p_baixo: float = 1       # percentil inferior
-    p_alto: float = 99       # percentil superior
+    p_baixo: float = 5       # percentil inferior — provisório, Rodada 6 (D47)
+    p_alto: float = 95       # percentil superior — provisório, Rodada 6 (D47)
     margem_h: int = 3        # margem em unidades de H
-    margem_s: int = 3        # margem em unidades de S
-    margem_v: int = 3        # margem em unidades de V
-    p_linha_v_baixo: float = 5   # percentil V para v_min branco
-    p_linha_s_alto: float = 95   # percentil S para s_max branco
-    margem_branco_s: int = 5
-    margem_branco_v: int = 5
+    margem_s: int = 15       # margem em unidades de S — provisório, Rodada 6 (D47)
+    margem_v: int = 15       # margem em unidades de V — provisório, Rodada 6 (D47)
+    p_linha_v_baixo: float = 1   # percentil V para v_min branco — provisório, Rodada 6 (D47)
+    p_linha_s_alto: float = 99   # percentil S para s_max branco — provisório, Rodada 6 (D47)
+    margem_branco_s: int = 10    # provisório, Rodada 6 (D47)
+    margem_branco_v: int = 10    # provisório, Rodada 6 (D47)
     min_pixels: int = 30
 
 

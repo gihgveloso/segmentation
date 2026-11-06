@@ -1354,3 +1354,31 @@ foram alinhados para usar frações com nomes `_FRACAO` / `_fracao`.
 Teste `test_referencia_overlap_sao_fracoes` pina os valores e a semântica.
 
 ---
+
+## D47 — Defaults de ParametrosEstimacao passam a G2W3 (provisório, n=2 imagens)
+
+**Decisão (2026-11-05):** novos defaults de `ParametrosEstimacao`: p_baixo 1→5, p_alto 99→95, margem_s 3→15, margem_v 3→15 (verde, "G2"); p_linha_v_baixo 5→1, p_linha_s_alto 95→99, margem_branco_s 5→10, margem_branco_v 5→10 (branco, "W3"). `margem_h` permanece 3. Sem filtro de H para o carpete. Estes valores SUBSTITUEM os valores numéricos do D41 (o D41 fica como histórico do método).
+
+**Evidência (Rodada 6, saida_r6.txt):** 5 estimadores (G0W0, G0W3, G1bW3, G2W3, G3W3), 2 imagens (bitbots, eliza), proxies R1/R2, com e sem 10% de cliques errados, 30 repetições por célula.
+- G2W3 teve FV_fundo mediano menor que G1bW3 e G3W3 na rnd1 nas 8 condições (4 sem erro, 4 com 10% de erro). O filtro de H foi descartado.
+- G2W3 vs G0W3 na rnd1 (sem erro, 4 combinações imagem×proxy): Rec_mc mediano 98,7–99,1 vs 94,4–97,9; Rec_mc pior caso 84–95 vs 36–84; FV_fundo pior caso 18–33 vs 23–58; FV_fundo mediano menor no G2W3 em 3 das 4 (eliza/R2 foi o contrário: 5,30 vs 3,22).
+- W3 vs W0 (G0): Rec_mc na rnd1 +1,7 a +2,2 pontos nas 4 combinações.
+- Troca: com a política "desfazer clique se o salto de área verde > 5 pp" (D48), o FV_fundo final do G0W3 ficou 3,7–12,2 contra 5,7–13,6 do G2W3 (empate em eliza/R1: 5,75 vs 5,69; bem menor no G0W3 em eliza/R2: 3,71 vs 10,48), porém com Rec_mc 94,8–98,7 contra 99,3–99,8. Escolheu-se G2W3 priorizando recall.
+
+**Ressalvas:** n=2 imagens, repetições não independentes, cliques simulados a partir de gabaritos. Sem guarda, o laço de refinamento alarga demais (FV_fundo mediano 0,2–2,4% na rnd0 e 21–56% na rnd3), então estes defaults só valem com o laço limitado do D48. A Rodada 6b (limiares de salto 2 e 3 pp, ROC corrigida) não foi executada.
+
+**Impacto:** `features/calibracao_cor.py` (defaults). `test_defaults_g2w3_d47` pina 9 campos (8 alterados + margem_h).
+
+---
+
+## D48 — Laço de calibração conservador em SessaoCalibracao (provisório, n=2)
+
+**Decisão (2026-11-05):** `features/sessao_calibracao.py`: MAX_RODADAS_CORRETIVAS=1; LIMIAR_SALTO_VERDE_PP=5.0 (rodada corretiva com salto de área verde acima disso exige confirmação; sem confirmação é desfeita); avisos suaves, nunca rejeição automática: clique de linha com >50% dos pixels na caixa verde atual (LIMIAR_FRAC_VERDE_LINHA=0.50), H do carpete a >12 da mediana dos aceitos (LIMIAR_H_DESVIO=12), cobertura espacial concentrada, avisos de verificar_sanidade.
+
+**Por quê (Rodada 6, 2 imagens):** sem guarda, o FV_fundo mediano vai de 0,2–2,4% (rnd0) a 21–56% (rnd3), e 3 rodadas fixas terminam "ruins" (FV>10% ou Rec<90%) em 60–100% das repetições. Desfazer o clique quando o salto de área verde passa de 5 pp reduziu o FV final do G2W3 (sem erro) de 22–25% para 5,7–13,6%, com Rec 99,3–99,8; o FV cai monotonicamente com o limiar 15→10→5; abaixo de 5 não foi testado. Substitutos em tempo de execução: S2 (salto de área verde) AUC agregado 0,66–0,82 (limiares de salto 3–10 pp, com e sem erro de clique); S1 (verde fora da convexa) 0,46–0,83 no bitbots e 0,78–0,97 no eliza (varia com a variante e o limiar de salto, 3–10 pp); S4 (salto de y_min) ≈0,5, descartado. Guardas de clique: linha caindo na caixa verde detecta 98,1% com 17,7% de falso alarme; carpete na caixa branca 27,5% vs 23,7% (descartado); diferença de H com X=12 detecta 88,5% mas com 38,2% de falso alarme, por isso só aviso.
+
+**Ressalvas:** n=2, limiares provisórios; o bloco ROC da Rodada 6 estava quebrado (não usar); a política C igual à B sem erro não foi explicada; 14,8% (e não 10%) dos cliques de linha simulados eram errados. Itens a resolver na Rodada 6b.
+
+**Impacto:** `features/sessao_calibracao.py`, `scripts/calibrar_cores.py`, `tests/test_sessao_calibracao.py`.
+
+---
